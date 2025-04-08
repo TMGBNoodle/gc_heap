@@ -63,7 +63,7 @@ impl<const MAX_BLOCKS: usize> BlockTable<MAX_BLOCKS> {
     }
 
     fn address(&self, p: Pointer) -> anyhow::Result<usize, HeapError> {
-        todo!("Find the address, i.e., start + offset, for the Pointer `p`");
+        //todo!("Find the address, i.e., start + offset, for the Pointer `p`");
         // Outline
         //
         // 1. If p has a block number that would be an illegal array access, report IllegalBlock.
@@ -71,6 +71,24 @@ impl<const MAX_BLOCKS: usize> BlockTable<MAX_BLOCKS> {
         // 3. If p's block has an offset that exceeds the size of our block, report OffsetTooBig.
         // 4. If p's block size is different than our block in the table, report MisalignedPointer.
         // 5. If none of those errors arises, return the start plus the offset.
+        let block_num = p.block_num();
+        let offset = p.offset();
+        if block_num >= MAX_BLOCKS {
+            return Err(HeapError::IllegalBlock(block_num, MAX_BLOCKS-1))
+        }
+        match self.block_info.get(block_num) {
+            None => return Err(HeapError::UnallocatedBlock(block_num)),
+            Some(info) => match info {
+                None => return Err(HeapError::UnallocatedBlock(block_num)),
+                Some(fin_info) => if fin_info.size < offset {
+                    return Err(HeapError::OffsetTooBig(offset, block_num, fin_info.size))
+                } else if fin_info.size != p.len() {
+                    return Err(HeapError::MisalignedPointer(p.len(), fin_info.size, block_num))
+                } else {
+                    return Ok(fin_info.start + offset);
+                }
+            }
+        }
     }
 
     fn allocated_block_ptr(&self, block: usize) -> Option<Pointer> {
@@ -100,27 +118,60 @@ impl<const HEAP_SIZE: usize> RamHeap<HEAP_SIZE> {
     }
 
     fn load(&self, address: usize) -> anyhow::Result<u64, HeapError> {
-        todo!("Return contents of heap at the given address. If address is illegal report it.");
+        //todo!("Return contents of heap at the given address. If address is illegal report it.");
+        if address < HEAP_SIZE {
+            return Ok(self.heap[address]);
+        } else {
+            return Err(HeapError::IllegalAddress(address, HEAP_SIZE-1));
+        }
     }
 
     fn store(&mut self, address: usize, value: u64) -> anyhow::Result<(), HeapError> {
-        todo!("Store value in heap at the given address. If address is illegal report it.");
+        //todo!("Store value in heap at the given address. If address is illegal report it.");
+        if address < HEAP_SIZE {
+            self.heap[address] = value;
+            return Ok(());
+        } else {
+            return Err(HeapError::IllegalAddress(address, HEAP_SIZE-1));
+        }
     }
 
     fn malloc(&mut self, num_words: usize) -> anyhow::Result<usize, HeapError> {
-        todo!("Perform basic malloc");
+        //todo!("Perform basic malloc");
         // Outline
         //
         // If the request is of size zero, report ZeroSizeRequest
         // Otherwise, calculate the address that will be given for the request to follow.
         // If that exceeds the heap size, report OutOfMemory
         // Otherwise, update `self.next_address` and return the address of the newly allocated memory.
+        if num_words == 0 {
+            return Err(HeapError::ZeroSizeRequest)
+        } else if self.next_address + num_words > HEAP_SIZE{
+            return Err(HeapError::OutOfMemory)
+        } else {
+            let addr = self.next_address;
+            self.next_address += num_words ;
+            return Ok(addr);
+        }
     }
 
     fn copy(&self, src: &BlockInfo, dest: &mut Self) -> anyhow::Result<BlockInfo, HeapError> {
-        todo!("Copy memory contents from src to dest");
+        //todo!("Copy memory contents from src to dest");
         // Outline
         //
+        let new_addr = dest.malloc(src.size);
+        for i in (src.start)..(src.start + src.size) {
+            let val = self.load(i);
+            dest.store(new_addr, val)
+        }
+        match new_addr {
+            Err(a) => Err(a),
+            Ok(a) => return Ok(BlockInfo {
+                start : a,
+                size : src.size,
+                num_times_copied : src.num_times_copied + 1,
+            })
+        }
         // Perform a malloc() in dest of the block's size.
         // Store every value from src's block in dest's block.
         // Return updated block information, including the starting address and an updated number of copies.
